@@ -74,7 +74,7 @@ window.onload = () => {
         this.color = { red: 0, green: 0, blue: 0 };
         this.reachedTarget = false;
         this.fadeStartTime = 0;
-        this.fadeDuration = 500;
+        this.fadeDuration = 1000;
         this.startTime = Date.now();
       }
 
