@@ -169,12 +169,14 @@ window.onload = () => {
       // Draw active raindrops first
       for (const drop of activeRaindrops) {
         drop.update();
+        // console.log(`hsla(${setRange(360, 0)}, 100, 100, ${drop.opacity})`);
         offscreenCtx.fillStyle = `rgba(${drop.color.red},${drop.color.green},${drop.color.blue},${drop.opacity})`;
+        // offscreenCtx.fillStyle = `hsla(${setRange(360, 0)}, 100%, 50%, 1)`;
         offscreenCtx.fillRect(
           Math.round(drop.x),
           Math.round(drop.y),
-          setRange(samplingRate, samplingRate * 3),
-          setRange(samplingRate, samplingRate * 3)
+          setRange(samplingRate, samplingRate * 4),
+          setRange(samplingRate, samplingRate * 4)
         );
       }
 
