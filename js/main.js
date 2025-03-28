@@ -15,6 +15,12 @@ window.onload = () => {
     return Math.random() * (max - min) + min;
   };
 
+  const calculateDistance = (x1, y1, x2, y2) => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
   scaler = (height, width) => {
     let maxDimension = 1000;
     let division = 1;
@@ -46,7 +52,7 @@ window.onload = () => {
 
   const render = (srcImg) => {
     button.disabled = true;
-    const completedRaindrops = new Map();
+    // const completedRaindrops = new Map();
 
     letAnimationComplete = false;
 
@@ -56,15 +62,22 @@ window.onload = () => {
     canvas.height = height;
     canvas.width = width;
 
-    // debugger;
-
     // Once the image is loaded, render it
     ctx.drawImage(srcImg, 0, 0, width, height);
     // Strip all the pixel data out of it [R, G, B, A, R, G, B, A...]
     const pixels = ctx.getImageData(0, 0, width, height);
     // Determine how many pixels we want to sample and keep, and how big the final rendered drops/pixels are
-    console.log(pixels);
-    const samplingRate = 1;
+
+    let samplingRate = 1;
+    console.log(pixels.data.length);
+    if (pixels.data.length > 1500000) {
+      samplingRate = 4;
+    } else if (pixels.data.length > 2000000) {
+      samplingRate = 6;
+    } else if (pixels.data.length > 2500000) {
+      samplingRate = 8;
+    }
+
     const mappedImage = [];
     const pixelMap = new Map();
 
@@ -101,92 +114,92 @@ window.onload = () => {
       constructor({ x, y, targetX, targetY, velocity, opacity }) {
         this.x = x || Math.random() * width;
         this.y = y || 0;
-        this.targetX = Math.round(targetX); // Ensure rounded
-        this.targetY = Math.round(targetY); // Ensure rounded
+        this.targetX = Math.round(targetX);
+        this.targetY = Math.round(targetY);
         this.velocity = velocity || Math.random() * 5 + 7;
         this.opacity = opacity || 0.5;
-        this.position1 = Math.floor(this.y);
-        this.position2 = Math.floor(this.x);
-        this.color = { red: 0, green: 0, blue: 0 };
         this.reachedTarget = false;
-        this.fadeStartTime = 0;
+        this.fadeStartTime = null; // Initialize to null
         this.fadeDuration = 1000;
-        this.startTime = Date.now();
+        this.startTime = performance.now();
+        this.curveAmplitude = setRange(1, 3);
+        this.curveFrequency = setRange(0.01, 0.03);
+        this.curveOffset = setRange(0, Math.PI * 2);
+        this.initialDistance = calculateDistance(
+          this.x,
+          this.y,
+          this.targetX,
+          this.targetY
+        );
       }
 
       update() {
-        const dx = this.targetX - this.x;
-        const dy = this.targetY - this.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const animationTime = (performance.now() - this.startTime) / 1000;
-
-        // Force the animations to end relatively quickly when velocities are overshooting
-        if (distance < 50 || animationTime > 200) {
-          this.reachedTarget = true;
-        }
-
-        // If it's hit its target, force its x/y (in case we forced an animation end, and fade it in over x ms)
-        if (this.reachedTarget) {
-          this.x = this.targetX;
-          this.y = this.targetY;
-          const fadeProgress =
-            (Date.now() - this.fadeStartTime) / this.fadeDuration;
-          this.opacity = Math.min(1, fadeProgress);
-          return;
-        }
-
         // Gets the colour value of its final target
         const finalPixelData = pixelMap.get(`${this.targetX},${this.targetY}`);
         this.color = finalPixelData;
+        if (this.reachedTarget) {
+          // Only start fade timer when first reaching target
+          if (this.fadeStartTime === null) {
+            this.fadeStartTime = performance.now();
+            this.opacity = 0; // Start fully transparent
+          }
 
-        // Calculate next position
-        const vx = (dx / distance) * this.velocity;
-        const vy = (dy / distance) * this.velocity;
-        const nextX = this.x + vx;
-        const nextY = this.y + vy;
-
-        // Check if next position would overshoot
-        const nextDx = this.targetX - nextX;
-        const nextDy = this.targetY - nextY;
-
-        // If signs are different, we're overshooting
-        if (dx * nextDx <= 0 || dy * nextDy <= 0) {
-          this.reachedTarget = true;
-          this.x = this.targetX;
-          this.y = this.targetY;
-          this.position1 = this.targetY;
-          this.position2 = this.targetX;
-          this.fadeStartTime = Date.now();
+          const fadeProgress =
+            (performance.now() - this.fadeStartTime) / this.fadeDuration;
+          this.opacity = Math.min(fadeProgress, 1); // Gradually increase opacity
           return;
         }
 
-        // Normal movement if not overshooting
-        this.x = nextX;
-        this.y = nextY;
-        this.position1 = Math.floor(this.y);
-        this.position2 = Math.floor(this.x);
+        const distance = calculateDistance(
+          this.x,
+          this.y,
+          this.targetX,
+          this.targetY
+        );
+        const animationTime = (performance.now() - this.startTime) / 1000;
 
-        // const pixelData = pixelMap.get(`${this.position2},${this.position1}`);
-        // if (pixelData) {
-        //   this.color = pixelData;
-        // }
+        if (distance < 50 || animationTime > 200) {
+          this.reachedTarget = true;
+          this.x = this.targetX;
+          this.y = this.targetY;
+          return;
+        }
+
+        // Rest of update logic...
+        const dx = this.targetX - this.x;
+        const dy = this.targetY - this.y;
+        const vx = (dx / distance) * this.velocity;
+        const vy = (dy / distance) * this.velocity;
+
+        const progress =
+          (performance.now() - this.startTime) * this.curveFrequency;
+        const curveOffset =
+          Math.sin(progress + this.curveOffset) * this.curveAmplitude;
+        const distanceRatio = distance / this.initialDistance;
+
+        this.x += vx;
+        this.y += vy + curveOffset * distanceRatio;
       }
     }
 
     // Create a raindrop for every pixel we created
     const raindrops = [];
+    const maxDistance = calculateDistance(0, 0, width / 2, height / 2); // Maximum possible distance from center
     pixelMap.forEach((rgbValue, xy) => {
       const x = parseInt(xy.split(",")[0]);
       const y = parseInt(xy.split(",")[1]);
+      const distance = calculateDistance(x, y, width / 2, height / 2);
+      // Invert the velocity calculation - closer to center = faster
+      const velocityFactor = 1 - distance / maxDistance; // Will be closer to 1 for center pixels, closer to 0 for edge pixels
+
       raindrops.push(
         new Raindrop({
-          x: setRange(x + width / 1.5, x - width / 1.5),
-          // x: target.x,
+          x: setRange(x + width / 1.2, x - width / 1.2),
           y: setRange(-50, -250),
           targetX: x,
           targetY: y,
-          velocity: setRange(5, 10),
-          opacity: setRange(0.1, 0.03),
+          velocity: setRange(5 + velocityFactor * 20, 10 + velocityFactor * 40), // Faster near center
+          opacity: setRange(0.05, 0.1),
         })
       );
     });
@@ -211,8 +224,8 @@ window.onload = () => {
         offscreenCtx.fillRect(
           Math.round(drop.x),
           Math.round(drop.y),
-          setRange(samplingRate, samplingRate * 5),
-          setRange(samplingRate, samplingRate * 5)
+          setRange(samplingRate, samplingRate * 3),
+          setRange(samplingRate, samplingRate * 3)
         );
       }
 
